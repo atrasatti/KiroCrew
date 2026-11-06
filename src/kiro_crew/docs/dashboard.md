@@ -59,8 +59,8 @@ Multi-session parallel chat with full Markdown rendering, syntax-highlighted cod
 
 Tags are labels you put on sessions. Every session shares one list of tags, so a change to a tag shows wherever that tag appears.
 
-- **Create a tag**: type a name in the **New tag…** box at the bottom of the tag picker or of the **Manage tags…** panel, and press Enter. A new tag gets the default gray color; change it afterwards in **Manage tags…**.
-- **Assign tags to a session**: choose **Tags…** from the session's `⋮` menu (on its sidebar row, or right-click the row) or from the chat header menu. In **Assign tags**, click a tag to add it to the session, and click it again to remove it.
+- **Assign tags to a session**: choose **Tags…** from the session's `⋮` menu (on its sidebar row, or right-click the row) or from the chat header menu. **Assign tags** opens with its search box ready for typing, and typing narrows the list to the tags whose names contain the text. Click a tag to add it to the session, and click it again to remove it. From the keyboard, the Up and Down arrows move the highlight through the list, and Enter adds or removes the highlighted tag. Typing a tag's full name highlights that tag, and Enter then adds it; Enter never removes a tag whose name you typed.
+- **Create a tag**: in **Assign tags**, type a name no tag has. The list offers a **Create “…”** row with that name, and Enter (or a click on that row) creates the tag and adds it to the session. You can also type a name in the **New tag…** box at the bottom of the **Manage tags…** panel and press Enter. A new tag gets the default gray color; change it afterwards in **Manage tags…**.
 - **Manage tags**: open the `⋮` (**More options**) menu at the top of the Sessions list and choose **Manage tags…**. Each row in the panel is one tag:
   - **Recolor**: click the color square at the start of the row, then pick a color from the palette that opens below the row. Picking a color saves it, and Escape closes the palette without a change.
   - **Rename**: click the tag's name and type. Enter or clicking away saves the new name, and Escape puts the old one back. An empty name is not saved.
