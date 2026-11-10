@@ -141,7 +141,7 @@ def test_updating_a_login_keeps_the_fields_the_request_leaves_out(tmp_path: Path
         "password": "pw-1",
         "notes": "n",
     }
-    # Sent as "", a field is cleared.
+    # Sent as "", notes are cleared.
     asyncio.run(vault.set_item_with_revision("GITHUB", "login", {**edit, "notes": ""}))
     stored = vault.get_items_many(["GITHUB"])["GITHUB"]
     assert stored is not None
@@ -272,6 +272,36 @@ async def _exercise_typed_round_trip(client: TestClient) -> None:
     assert by_name["PLAIN"]["type"] == "secret" and by_name["PLAIN"].get("fields") is None
     text = json.dumps(listing)
     assert "pw-1" not in text and "sk-1" not in text
+
+
+@pytest.mark.asyncio
+async def test_the_wakatime_oauth_tokens_entry_refuses_a_typed_write_and_lists_no_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Main's rule: the generic routes refuse WAKATIME_OAUTH_TOKENS with 409. A
+    # typed write (login, note, or a secret sent as fields) takes the same route,
+    # so it is refused the same way and the flow's entry is left untouched.
+    import kiro_crew.dashboard.handlers.secrets as handlers
+    from kiro_crew.config.loader import CRED_WAKATIME_OAUTH_TOKENS
+
+    monkeypatch.setattr(handlers, "config_dir", lambda: str(tmp_path))
+    SecretVault(tmp_path)._set_sync(CRED_WAKATIME_OAUTH_TOKENS, '{"access_token": "at-1"}')
+    async with TestClient(TestServer(_app())) as client:
+        for body in (
+            {"name": CRED_WAKATIME_OAUTH_TOKENS, "type": "login", "fields": _LOGIN},
+            {"name": CRED_WAKATIME_OAUTH_TOKENS, "type": "note", "fields": {"text": "x"}},
+            {"name": CRED_WAKATIME_OAUTH_TOKENS, "type": "secret", "fields": {"value": "x"}},
+        ):
+            resp = await client.post("/api/secrets", json=body)
+            assert resp.status == 409, body
+            assert (await resp.json())["code"] == "managed_by_wakatime_oauth"
+        resp = await client.get("/api/secrets")
+        listing = await resp.json()
+    row = {item["name"]: item for item in listing["items"]}[CRED_WAKATIME_OAUTH_TOKENS]
+    assert row["type"] == "secret" and row.get("fields") is None
+    assert "at-1" not in json.dumps(listing)
+    stored = SecretVault(tmp_path).get(CRED_WAKATIME_OAUTH_TOKENS)
+    assert stored is not None and stored.reveal() == '{"access_token": "at-1"}'
 
 
 @pytest.mark.asyncio
