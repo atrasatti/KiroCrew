@@ -108,6 +108,7 @@ def test_managed_secret_names_cover_every_shipped_preregistered_provider():
         "google-sheets",
         "google-docs",
         "google-slides",
+        "slack",
     }
 
 
@@ -624,7 +625,7 @@ def test_strip_removes_only_the_three_owned_keys_and_keeps_siblings():
             "issuer": "https://github.com/login/oauth",
         },
     }
-    out = strip_preregistered_oauth_client(entry)
+    out = strip_preregistered_oauth_client(entry, user_oauth=None)
     assert out["oauth"] == {"issuer": "https://github.com/login/oauth"}
     # The input is not mutated.
     assert entry["oauth"]["clientSecret"] == "retired"
@@ -634,7 +635,8 @@ def test_strip_drops_the_oauth_mapping_when_nothing_is_left():
     from kiro_crew.connections.oauth_clients import strip_preregistered_oauth_client
 
     out = strip_preregistered_oauth_client(
-        {"url": GITHUB_MCP_URL, "oauth": {"clientId": "old", "clientSecret": "retired"}}
+        {"url": GITHUB_MCP_URL, "oauth": {"clientId": "old", "clientSecret": "retired"}},
+        user_oauth=None,
     )
     assert "oauth" not in out
 
@@ -642,7 +644,41 @@ def test_strip_drops_the_oauth_mapping_when_nothing_is_left():
 def test_strip_is_a_no_op_without_an_oauth_block():
     from kiro_crew.connections.oauth_clients import strip_preregistered_oauth_client
 
-    assert strip_preregistered_oauth_client({"url": GITHUB_MCP_URL}) == {"url": GITHUB_MCP_URL}
+    entry = {"url": GITHUB_MCP_URL}
+    assert strip_preregistered_oauth_client(entry, user_oauth=None) == entry
+
+
+def test_every_strip_call_says_what_happens_to_the_users_client():
+    """``user_oauth`` has no default, and every call in the source tree passes it.
+
+    A call that leaves it out strips the client the user wrote in their own entry.
+    The source is parsed, not imported, so a call on a path no test runs is seen too.
+    """
+    import ast
+    import inspect
+    from pathlib import Path
+
+    import kiro_crew
+    from kiro_crew.connections.oauth_clients import strip_preregistered_oauth_client
+
+    param = inspect.signature(strip_preregistered_oauth_client).parameters["user_oauth"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+
+    calls, bare = 0, []
+    for path in sorted(Path(kiro_crew.__file__).parent.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if name != "strip_preregistered_oauth_client":
+                continue
+            calls += 1
+            if not any(kw.arg == "user_oauth" for kw in node.keywords):
+                bare.append(f"{path.name}:{node.lineno}")
+    assert calls >= 5, calls
+    assert bare == []
 
 
 # ── agent-config read redaction (mcp_utils) ──

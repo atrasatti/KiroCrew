@@ -787,7 +787,10 @@ def _url_payload_command(n: int) -> str:
 #: ``is_denied`` opens, in a leaf module with ``once_per_call`` on the pure readers one
 #: judgement repeats (shell tokens, program basename, operand, self-program test, line
 #: fold, Python lexer, quoted scripts). Same verdicts, less work. Re-measured.
-_PACKAGE_LINE_BUDGET = 35_712
+#: Raised by 1, from 35,712, for the exact Slack consent pair
+#: ``("slack.com", "/oauth/v2_user/authorize")`` in ``exfil_oauth``'s endpoint set.
+#: Re-measured.
+_PACKAGE_LINE_BUDGET = 35_713
 
 #: Ceiling on any ONE file in the package. This is what the bound is really for --
 #: a package total says nothing about a single file growing back into a second

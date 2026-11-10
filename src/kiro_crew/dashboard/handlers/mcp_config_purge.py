@@ -195,6 +195,7 @@ def _scrub_preregistered_oauth_copies(slug: str) -> dict[str, str]:
     retired secret.
     """
     from kiro_crew.connections.oauth_clients import (  # noqa: PLC0415
+        keeps_user_client,
         provider_for_server,
         strip_preregistered_oauth_client,
     )
@@ -225,7 +226,15 @@ def _scrub_preregistered_oauth_copies(slug: str) -> dict[str, str]:
         if not isinstance(entry, dict) or provider_for_server(slug, entry) is None:
             actions[label] = "noop"
             continue
-        stripped = strip_preregistered_oauth_client(entry)
+        if keeps_user_client(slug):
+            # A scope copy has dropped the projected client since before this
+            # provider joined the registry, so a client here is one the user wrote
+            # (a standalone kiro-cli may read this very file): never rewrite it.
+            actions[label] = "noop"
+            continue
+        # Strip everything: this line is reached only for a provider whose source
+        # entries may hold a copy of the operator's client (the check above).
+        stripped = strip_preregistered_oauth_client(entry, user_oauth=None)
         if stripped == entry:
             actions[label] = "noop"
             continue
