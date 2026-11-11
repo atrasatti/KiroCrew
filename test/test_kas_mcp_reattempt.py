@@ -115,6 +115,10 @@ def _handle(begun: list, accept: bool = True) -> AcpSessionHandle:
     handle._mcp_sign_in_dropped = 0
     handle._mcp_reattempt_waiting = set()
     handle._mcp_reattempt_counts = {}
+    handle._mcp_sign_in_probes = {}
+    handle._mcp_sign_in_probed = set()
+    handle._mcp_sign_in_spent = set()
+    handle._session_key = ""
     handle._oauth_emitted_servers = set()
     return handle
 

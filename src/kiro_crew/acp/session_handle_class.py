@@ -123,6 +123,7 @@ class AcpSessionHandle:
     wait_for_declared_mcp = _sh_mcp.wait_for_declared_mcp
     wait_mounted_mcp = _sh_mcp.wait_mounted_mcp
     _note_mcp_sign_in_status = _sh_mcp._note_mcp_sign_in_status
+    _probe_mcp_sign_in = _sh_mcp._probe_mcp_sign_in
     _offer_mcp_sign_in = _sh_mcp._offer_mcp_sign_in
     want_mcp_sign_in_named = _sh_mcp.want_mcp_sign_in_named
     _match_mcp_sign_in_ask = _sh_mcp._match_mcp_sign_in_ask
@@ -657,6 +658,14 @@ class AcpSessionHandle:
         # See kiro_crew.acp.mcp_reattempt.
         self._mcp_reattempt_waiting: set[str] = set()
         self._mcp_reattempt_counts: dict[str, int] = {}
+        # Failed servers whose error is not a credential failure, each probed once
+        # for whether it wants a sign-in (``_probe_mcp_sign_in``), at most
+        # ``BUCKET_CAP`` names; those whose probe said so and that have not
+        # connected since; and those that connected or were disabled this session,
+        # whose probe answer is spent.
+        self._mcp_sign_in_probes: dict[str, asyncio.Task[bool]] = {}
+        self._mcp_sign_in_probed: set[str] = set()
+        self._mcp_sign_in_spent: set[str] = set()
         # What THIS session's MCP servers reported at init — parity with
         # AcpClient._mcp_report. On the shared runtime the frames are staged
         # per sessionId before this handle's queue exists, so the report is

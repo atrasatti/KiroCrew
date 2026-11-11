@@ -724,6 +724,11 @@ class McpSessionReport:
     #: :meth:`restart_to_load`: the next turn may bring them up. Set by the
     #: session handle through :meth:`set_reattempting`.
     _reattempting: frozenset[str] = frozenset()
+    #: Servers a tokenless probe found asking for a sign-in and that have not
+    #: connected since: a ``failed`` entry for one reads as awaiting
+    #: authorization whatever error it carries. Set by the session handle
+    #: through :meth:`set_unauthorized`.
+    _unauthorized: frozenset[str] = frozenset()
     #: True once ``begin_session`` has run. Distinguishes "no session" from "a
     #: session that has reported nothing yet" — see ``payload``. Without it, the
     #: kiro-cli path (whose wire roster is empty by design) reads as no session.
@@ -760,10 +765,17 @@ class McpSessionReport:
         self._awaiting_auth.clear()
         self._failures.clear()
         self._reattempting = frozenset()
+        self._unauthorized = frozenset()
 
     def set_reattempting(self, names: set[str] | frozenset[str]) -> None:
         """Record which failed servers the session still re-attempts itself."""
         self._reattempting = frozenset(names)
+
+    def set_unauthorized(self, names: set[str] | frozenset[str]) -> None:
+        """Record which servers a probe found asking for a sign-in; a failed one now awaits it."""
+        self._unauthorized = frozenset(sanitize_sink_text(name, _NAME_CAP) for name in names)
+        for name in [name for name in self._failed if name in self._unauthorized]:
+            self._record(_ACTION_OAUTH, name)
 
     def include_configured(self, names: tuple[str, ...]) -> None:
         """Add active-agent declarations without restarting this session's report."""
@@ -991,7 +1003,9 @@ class McpSessionReport:
                 if not name:
                     continue
                 status = server.get("status")
-                if server.get("failedAuthorization") is True:
+                if server.get("failedAuthorization") is True or (
+                    status == "failed" and name in self._unauthorized
+                ):
                     action = _ACTION_OAUTH
                 elif status in ("failed", "disabled"):
                     action = _ACTION_INIT_FAILURE
