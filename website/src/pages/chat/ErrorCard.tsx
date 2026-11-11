@@ -278,12 +278,18 @@ export interface ErrorCardProps {
   /**
    * The fix affordance for an `auth_required` row: deep link to the Kiro
    * sign-in card in Settings, where the user signs in to Kiro Crew's own
-   * identity again. Offered INSTEAD of Continue for the same reason as the
-   * entitlement actions -- a retry hits the same signed-out wall -- and on
-   * EVERY such row, because a lapsed sign-in is settled state the user still
-   * has to act on. Omitted on a surface with no settings route (embed, popout).
+   * identity again. Offered INSTEAD of Continue (until `signInWorks`) for the
+   * same reason as the entitlement actions -- a retry hits the same signed-out
+   * wall -- and on EVERY such row, because a lapsed sign-in is settled state
+   * the user still has to act on. Omitted on a surface with no settings route (embed, popout).
    */
   onOpenSignIn?: () => void
+  /**
+   * True on an `auth_required` row whose sign-in the host has read as working
+   * again: the card keeps its Sign in button and adds `onContinue`'s Resume
+   * beside it, since a retry no longer meets that wall.
+   */
+  signInWorks?: boolean
   /**
    * True on the newest `session_start_failed` row when the same session start
    * has already failed `SESSION_START_REPEAT_REFUSAL_AT` times in a row with
@@ -587,6 +593,7 @@ export const ErrorCard = memo(function ErrorCard({
   onPickModel,
   onOpenDefaultModel,
   onOpenSignIn,
+  signInWorks,
   unentitledElsewhere,
   featureRequestFormUrl,
   kiroCliMissing,
@@ -695,6 +702,21 @@ export const ErrorCard = memo(function ErrorCard({
       </div>
     )
   }
+  const resumeButton = onContinue && (
+    <button
+      type="button"
+      onClick={onContinue}
+      disabled={continuing}
+      className={`${ACTION_BTN} bg-accent text-accent-fg hover:bg-accent-hover`}
+      title={i18nT('pages.chat.errorCard.resume_hint')}
+      data-testid="error-card-continue"
+    >
+      {continuing
+        ? <Loader2 size={12} className="lucide-inline shrink-0 animate-spin" aria-hidden="true" />
+        : <RotateCw size={12} className="lucide-inline shrink-0" aria-hidden="true" />}
+      {i18nT('pages.chat.errorCard.resume')}
+    </button>
+  )
   if (onOpenSignIn) {
     // A signed-out agent process: the one action that ends it is signing in
     // again from Settings. The prose (the backend's own wording, which may
@@ -720,6 +742,7 @@ export const ErrorCard = memo(function ErrorCard({
             <KeyRound size={12} className="lucide-inline shrink-0" aria-hidden="true" />
             {i18nT('pages.chat.errorCard.sign_in')}
           </button>
+          {signInWorks && resumeButton}
         </div>
       </div>
     )
@@ -955,21 +978,6 @@ export const ErrorCard = memo(function ErrorCard({
       </div>
     )
   }
-  const resumeButton = onContinue && (
-    <button
-      type="button"
-      onClick={onContinue}
-      disabled={continuing}
-      className={`${ACTION_BTN} bg-accent text-accent-fg hover:bg-accent-hover`}
-      title={i18nT('pages.chat.errorCard.resume_hint')}
-      data-testid="error-card-continue"
-    >
-      {continuing
-        ? <Loader2 size={12} className="lucide-inline shrink-0 animate-spin" aria-hidden="true" />
-        : <RotateCw size={12} className="lucide-inline shrink-0" aria-hidden="true" />}
-      {i18nT('pages.chat.errorCard.resume')}
-    </button>
-  )
   if (onOpenTurnLimit || turnLimitSlot) {
     const secondaryBtn = `${ACTION_BTN} bg-transparent text-text ring-1 ring-inset ring-border hover:bg-bg-elevated`
     return (
