@@ -530,6 +530,7 @@ class TestAdoptedRecoveryRebindsOwnership:
             "_capture_adopted_owners",
             lambda name, port, path: ([222], {222: "new"}),
         )
+        bmod._write_pidfile({"ad": {"pid": 222, "start_time": "new", "port": 9240}})
         probes.append(True)
 
         bmod._watch_backend_health(ap, "/health")
@@ -549,6 +550,24 @@ class TestAdoptedRecoveryRebindsOwnership:
 
         assert ap.healthy is False  # refused
         assert ap.adopted_pids == [111]  # untouched, not silently half-updated
+        assert bmod.get_app_backend_port("ad") is None
+
+    def test_an_unrecorded_listener_taking_the_port_is_not_rebound(self, monkeypatch, watched):
+        # The adopted backend exited and a process the gateway never spawned now answers
+        # the same port: it names no pidfile row, so the sweep must neither bind nor promote it.
+        bmod, ap, probes = watched
+        monkeypatch.setattr(
+            bmod,
+            "_capture_adopted_owners",
+            lambda name, port, path: ([333], {333: "other"}),
+        )
+        bmod._write_pidfile({"ad": {"pid": 111, "start_time": "old", "port": 9240}})
+        probes.append(True)
+
+        bmod._watch_backend_health(ap, "/health")
+
+        assert ap.healthy is False
+        assert ap.adopted_pids == [111]
         assert bmod.get_app_backend_port("ad") is None
 
     def test_a_spawned_backend_does_not_pay_the_recapture(self, monkeypatch, watched):

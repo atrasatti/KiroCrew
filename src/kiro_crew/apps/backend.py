@@ -81,7 +81,11 @@ if "_PART_MODULES" in globals():
         _importlib.reload(_sys.modules[_reloaded])
     del _reloaded
 
-from kiro_crew.apps.backend_runtime.pidfile import _proc_start_time, _record_app_pid  # noqa: E402
+from kiro_crew.apps.backend_runtime.pidfile import (  # noqa: E402
+    _proc_start_time,
+    _record_app_pid,
+    _spawn_is_recorded,
+)
 from kiro_crew.apps.backend_runtime.ports import (  # noqa: E402
     _MAX_PORT,
     _MIN_PORT,
@@ -376,7 +380,7 @@ def _start_app_backend(
             return None
         if app_name in _processes:
             existing = _processes[app_name]
-            # Already running (spawned proc alive, OR an adopted external instance) — reuse.
+            # Already running (spawned proc alive, OR an adopted recorded spawn) — reuse.
             if existing.proc and existing.proc.poll() is None:
                 logger.info("App %s backend already running (pid %d)", app_name, existing.pid)
                 return existing
@@ -597,13 +601,6 @@ def _start_app_backend_body(app_name: str, manifest: Any) -> AppProcess | None:
             healthy = _probe_adoption_health(port, manifest.backend.healthCheck)
 
             if healthy:
-                try:
-                    sel().log_api_access(
-                        caller="gateway", operation="app_backend_adopt",
-                        outcome="adopted", resources=f"{app_name} port={port}",
-                    )
-                except Exception as exc:
-                    logger.debug("SEL audit failed for app %s backend adopt: %s", app_name, exc)
                 # Record owning PIDs at adoption time, scoped to the listener
                 # the health probe actually reached. The probe above only ever
                 # talks to 127.0.0.1:<port>; loopback_owner_pids mirrors the
@@ -619,6 +616,23 @@ def _start_app_backend_body(app_name: str, manifest: Any) -> AppProcess | None:
                 if adopted is None:
                     return None
                 adopted_pids, adopted_start_times = adopted
+                # Adopt only a listener the pidfile row this gateway wrote at spawn names.
+                recorded = _spawn_is_recorded(app_name, adopted_pids, adopted_start_times)
+                try:
+                    sel().log_api_access(
+                        caller="gateway", operation="app_backend_adopt",
+                        outcome="adopted" if recorded else "refused_unrecorded",
+                        resources=f"{app_name} port={port}",
+                    )
+                except Exception as exc:
+                    logger.debug("SEL audit failed for app %s backend adopt: %s", app_name, exc)
+                if not recorded:
+                    logger.warning(
+                        "App %s: not adopting the instance on port %d (pids %s): "
+                        "not spawned by this gateway. Stop that process, or free the port.",
+                        app_name, port, adopted_pids,
+                    )
+                    return None
                 logger.info("App %s: healthy instance already on port %d — adopting (pids=%s)", app_name, port, adopted_pids)
                 ap = AppProcess(
                     app_name=app_name, port=port, pid=0, proc=None,
@@ -628,9 +642,9 @@ def _start_app_backend_body(app_name: str, manifest: Any) -> AppProcess | None:
                     gateway_started=True,
                     # NOT `_admitted_builtin`. That classification is sound only for a
                     # process the gateway itself launched from the path the gate vetted.
-                    # Here the gateway launched nothing: it found a listener already
-                    # answering on the port and adopted it, and no check establishes
-                    # that the listener is executing the shipped code the manifest
+                    # Here the gateway launched nothing on this call: it found a listener
+                    # its own earlier spawn record names, and nothing establishes
+                    # that the process still executes the shipped code the manifest
                     # declares. Carrying the exemption across would let anything that
                     # answers a builtin's port inherit "shipped provenance" and be
                     # skipped by the revocation sweep for good -- the next boot re-probes
@@ -640,14 +654,11 @@ def _start_app_backend_body(app_name: str, manifest: Any) -> AppProcess | None:
                     # its execution path and classifies it correctly on that path.
                     admitted_builtin=False,
                 )
-                # Adopted (externally-managed) backends are deliberately NOT
-                # recorded for the startup stale-reap: the reap SIGTERMs a whole
-                # process GROUP (safe only for our own start_new_session children),
-                # whereas an external process's group may hold unrelated processes.
-                # If the gateway dies, the external instance keeps running and is
-                # simply re-probed and re-adopted on the next start — so reaping it
-                # would kill a healthy service we would immediately re-adopt. stop's
-                # adopted path kills only the re-validated PIDs for this reason.
+                # Only a listener this gateway recorded spawning is adopted; one started
+                # outside the gateway is refused above. Adoption adds no pidfile row of
+                # its own: the row that attributed this listener stays as the spawn wrote
+                # it. stop's adopted path kills only the re-validated PIDs, because the
+                # process group may hold processes no spawn of ours placed.
                 with _lock:
                     if (
                         _spawn_owner is not None

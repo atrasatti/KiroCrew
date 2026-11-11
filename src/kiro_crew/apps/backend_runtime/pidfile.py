@@ -116,6 +116,21 @@ def _record_app_pid(
     return start_time
 
 
+def _spawn_is_recorded(app_name: str, pids: list[int], start_times: dict[int, str]) -> bool:
+    """Whether the spawn row this gateway wrote for *app_name* names one of *pids*.
+
+    A health answer says nothing about who started the listener. The recorded leader pid
+    must be among the captured owners and its start time must match the one captured
+    now, so a recycled pid or a process started outside the gateway is not vouched for.
+    shortcut: only the recorded leader counts, so a spawn whose leader does not own the
+    socket is refused; widen via spawn_instance if that matters.
+    """
+    row = _read_pidfile().get(app_name) or {}
+    leader = row.get("pid")
+    start = row.get("start_time")
+    return leader in pids and start is not None and start == start_times.get(leader)
+
+
 def _forget_app_pid(app_name: str) -> None:
     """Drop an app's pidfile entry (called when no process identity is tracked)."""
     try:

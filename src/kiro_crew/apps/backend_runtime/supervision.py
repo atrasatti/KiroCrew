@@ -16,6 +16,7 @@ import time
 from typing import Literal
 
 from kiro_crew.apps.backend_runtime import _FACADE
+from kiro_crew.apps.backend_runtime.pidfile import _spawn_is_recorded
 from kiro_crew.apps.backend_runtime.ports import _capture_adopted_owners
 from kiro_crew.apps.backend_runtime.probe import (
     HealthProbeOutcome,
@@ -143,7 +144,7 @@ def _rebind_adopted_owners(ap: AppProcess, health_path: str) -> bool:
 
     Reuses the adoption-time consistency sandwich (:func:`_capture_adopted_owners`), so a
     responder that exits mid-capture cannot hand ownership to a bystander. Returns False
-    when ownership cannot be established, which the caller treats as "do not promote".
+    when ownership cannot be established or the owners are not a recorded spawn, which the caller treats as "do not promote".
     """
     try:
         captured = _capture_adopted_owners(ap.app_name, ap.port, health_path)
@@ -164,6 +165,15 @@ def _rebind_adopted_owners(ap: AppProcess, health_path: str) -> bool:
         )
         return False
     pids, start_times = captured
+    if not _spawn_is_recorded(ap.app_name, pids, start_times):
+        logger.warning(
+            "App %s: the listener on port %d (pids %s) is not a spawn this gateway "
+            "recorded — not re-binding it",
+            ap.app_name,
+            ap.port,
+            pids,
+        )
+        return False
     with _lock:
         if _processes.get(ap.app_name) is not ap:
             return False

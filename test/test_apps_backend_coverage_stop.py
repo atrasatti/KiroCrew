@@ -11,6 +11,7 @@ the family shares come from ``apps_backend_coverage_helpers.py``.
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -117,6 +118,41 @@ class TestStopAdoptedBackend:
         # Tracking is restored so a retry after re-adoption is possible.
         assert bmod._processes["ext"] is ap
         assert bmod._allocated_ports["ext"] == ap.port
+
+    def test_a_refused_adopted_stop_keeps_the_spawn_row_so_the_backend_stays_adoptable(
+        self, kills: list[tuple[int, int]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stop that is refused restores tracking and the backend keeps serving, so the
+        row that vouches for it must survive; a successful stop then removes it."""
+
+        ap = self._track(adopted_pids=[111], adopted_start_times={111: "st-111"}, healthy=True)
+        bmod._write_pidfile({"ext": {"pid": 111, "start_time": "st-111", "port": ap.port}})
+        monkeypatch.setattr(bmod, "_proc_start_time", lambda pid: "st-111")
+        monkeypatch.setattr(bmod, "_health_probe", lambda *_a: SimpleNamespace(healthy=True))
+
+        assert bmod.stop_app_backend("ext", _retry_if_serving="/health") is False
+        assert bmod._processes["ext"] is ap
+        assert bmod._spawn_is_recorded("ext", [111], {111: "st-111"}) is True
+
+        monkeypatch.setattr(bmod, "_health_probe", lambda *_a: SimpleNamespace(healthy=False))
+        assert bmod.stop_app_backend("ext", _retry_if_serving="/health") is True
+        assert "ext" not in bmod._read_pidfile()
+
+    def test_a_successful_adopted_stop_leaves_a_successors_row(
+        self, kills: list[tuple[int, int]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._track(adopted_pids=[111], adopted_start_times={111: "st-111"}, healthy=True)
+        bmod._write_pidfile({"ext": {"pid": 111, "start_time": "st-111", "port": 1}})
+        monkeypatch.setattr(bmod, "_proc_start_time", lambda pid: "st-111")
+        real_wait = bmod._wait_for_pids
+
+        def _successor_records(pids: list[int], timeout: float = 2.0) -> None:
+            real_wait(pids, timeout)
+            bmod._write_pidfile({"ext": {"pid": 999, "start_time": "st-999", "port": 1}})
+
+        monkeypatch.setattr(bmod, "_wait_for_pids", _successor_records)
+        assert bmod.stop_app_backend("ext") is True
+        assert bmod._read_pidfile()["ext"]["pid"] == 999
 
     def test_only_identity_verified_pids_are_signalled(
         self, kills: list[tuple[int, int]], monkeypatch: pytest.MonkeyPatch

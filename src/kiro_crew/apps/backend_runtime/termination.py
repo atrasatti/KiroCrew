@@ -20,6 +20,7 @@ from kiro_crew.apps.backend_runtime.pidfile import (
     _forget_app_pid,
     _forget_app_pid_if,
     _proc_start_time,
+    _read_pidfile,
 )
 from kiro_crew.apps.backend_runtime.ports import _allocated_ports
 from kiro_crew.apps.backend_runtime.probe import _health_probe
@@ -330,8 +331,14 @@ def stop_app_backend(
             _restart_attempts.pop(app_name, None)
         # Keep cleanup inside the lifecycle transition's serialization. A later explicit
         # start cannot record its successor between the pop and this identity check.
+        adopted_row: dict[str, Any] = {}
         if ap is not None and ap.proc is not None:
             _forget_app_pid_if(app_name, ap.pid, ap.pid_start_time)
+        elif ap is not None:
+            # An adopted record is attributed by this row, so it stays until the
+            # teardown below succeeds; a refused stop restores tracking and the row
+            # must still vouch for the backend that keeps serving.
+            adopted_row = _read_pidfile().get(app_name) or {}
         else:
             _forget_app_pid(app_name)
 
@@ -668,6 +675,9 @@ def stop_app_backend(
     if ap.proc:
         logger.info("Stopped app %s backend (pid %d)", app_name, ap.pid)
     else:
+        # Teardown succeeded: drop the row only if it still identifies what was read
+        # at the pop, so a successor's row is never removed.
+        _forget_app_pid_if(app_name, adopted_row.get("pid", 0), adopted_row.get("start_time"))
         logger.info("Stopped adopted app %s backend on port %s", app_name, ap.port)
     if ap.log_fh:
         try:
