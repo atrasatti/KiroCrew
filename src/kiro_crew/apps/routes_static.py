@@ -226,7 +226,30 @@ def _open_ui_file(name: str, file_path: str) -> tuple[int, os.stat_result] | str
     stat — because every part is a blocking syscall and the gateway runs on one
     event loop (``no-blocking-call-on-event-loop``).
     """
+    # Imported here so the routes facade, which serves this module's names, gains none.
+    from kiro_crew.apps import protected_app_ui
+
     ui_root = apps_dir() / name / "ui"
+    # The containment ANCHOR (see below): the app's own install directory.
+    anchor = Path(os.path.realpath(apps_dir())) / name
+    ext = Path(file_path).suffix.lower()
+    live_root = os.path.realpath(ui_root)
+    if ext in protected_app_ui.SCRIPT_EXTENSIONS and not (
+        # Served live, scripts included, only for a dev-mode root OUTSIDE the
+        # install: the toggle route refuses that case, so only the operator's
+        # host-side confirmation grants it. A root inside the install is the
+        # sandbox-writable tree itself, so its scripts still come from the copy.
+        live_root == dev_mode_granted_root(name)
+        and not Path(live_root).is_relative_to(anchor)
+    ):
+        # A script runs in the dashboard's own origin, with the owner's session, so
+        # it is served from the gateway's copy of what it installed
+        # (``protected_app_ui``), never from the sandbox-writable tree. An app the
+        # gateway never installed has no copy, and its scripts are not found.
+        copy = protected_app_ui.served_root(apps_dir(), name)
+        if copy is None:
+            return "not_found"
+        ui_root = anchor = copy
     target = ui_root / file_path
     try:
         # Resolved ONCE, here, because `pin_parent` requires the CALLER to do
@@ -262,7 +285,7 @@ def _open_ui_file(name: str, file_path: str) -> tuple[int, os.stat_result] | str
         # itself is not app-writable, so this anchor cannot be swapped; an
         # install entry that IS a link makes its resolved ui root land
         # outside this anchor and take the grant path like any other escape.
-        resolved_install = Path(os.path.realpath(apps_dir())) / name
+        resolved_install = anchor
         try:
             resolved_root.relative_to(resolved_install)
         except ValueError:
