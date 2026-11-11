@@ -200,6 +200,9 @@ def _tail_gh_meta(meta: dict) -> dict:
     }
     if meta.get("failed"):
         gh["failed"] = True
+    # Whether the call ran: the card credits a write only from a row that did.
+    if isinstance(meta.get("tool_status"), str):
+        gh["tool_status"] = meta["tool_status"]
     return gh
 
 
