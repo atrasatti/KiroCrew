@@ -794,6 +794,27 @@ class TestMaybeReexec:
         path_entries = exec_env["PATH"].split(os.pathsep)
         assert path_entries[0] == str(kcbin.parent)
 
+    @pytest.mark.parametrize("inherited", [None, ""])
+    def test_an_empty_inherited_path_adds_no_current_directory_entry(
+        self, tmp_path, monkeypatch, inherited
+    ):
+        """No inherited PATH must not leave a trailing separator: an empty PATH entry
+        searches the working directory, the target checkout after the chdir."""
+        checkout = _make_valid_checkout(tmp_path)
+        write_target(checkout)
+        monkeypatch.setattr(sys, "argv", ["/usr/bin/kirocrew", "gateway"])
+        monkeypatch.delenv(EXEC_MARKER, raising=False)
+        if inherited is None:
+            monkeypatch.delenv("PATH", raising=False)
+        else:
+            monkeypatch.setenv("PATH", inherited)
+        mock_execve = MagicMock()
+        monkeypatch.setattr(os, "execve", mock_execve)
+        monkeypatch.setattr(os, "chdir", MagicMock())
+        maybe_reexec(["gateway"])
+        exec_env = mock_execve.call_args[0][2]
+        assert exec_env["PATH"] == str(target_bin(checkout.resolve()).parent)
+
     def test_execve_oserror_is_swallowed(self, tmp_path, monkeypatch, caplog):
         """Fail-safe: OSError from execve does not propagate."""
         checkout = _make_valid_checkout(tmp_path)

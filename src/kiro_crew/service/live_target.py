@@ -464,8 +464,9 @@ def maybe_reexec(argv: list[str], *, log: object = None) -> None:
         # The target's venv leads PATH. Without this, a bare ``kirocrew`` in a
         # subprocess (or an agent shell turn) resolves to the machine-wide
         # install, so the gateway would run the target while everything it
-        # spawns re-invoked the old build.
-        "PATH": os.pathsep.join([str(kcbin.parent), os.environ.get("PATH", "")]),
+        # spawns re-invoked the old build. An empty inherited PATH adds nothing:
+        # a trailing separator is an empty entry, which searches the cwd.
+        "PATH": os.pathsep.join([str(kcbin.parent), *filter(None, [os.environ.get("PATH")])]),
     }
     _warn(log, f"live target set: executing {kcbin}")
     try:
