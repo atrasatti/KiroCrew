@@ -596,7 +596,11 @@ def interactive_guidance(
     minimal_context: bool,
     producer_is_user_facing: bool = False,
 ) -> list[str]:
-    """The per-turn ``[OPTIONS:]`` and dashboard-tool guidance paragraphs.
+    """The ``[OPTIONS:]`` and dashboard-tool guidance paragraphs of a turn.
+
+    What a turn would carry. Whether its message does is the builder's call
+    (``delivery_records._reply_format_due``): once per engine conversation on a
+    harness whose compaction Kiro Crew sees, every message elsewhere.
 
     *producer_is_user_facing* says a person sent this turn on a dashboard
     slot. It defaults to False, the applier's own default, so a caller that

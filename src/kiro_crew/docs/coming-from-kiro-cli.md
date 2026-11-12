@@ -64,7 +64,10 @@ To work with a CLI-style agent instead:
 On any agent, Crew still adds memory, learned corrections and the dashboard
 reply rules. A custom agent in `~/.kiro/agents/` can set
 `"includeCrewContext": false` to drop Crew's block of dashboard rules and its
-dashboard-tool reminders; some reply-format guidance still comes with each turn.
+dashboard-tool reminders; some reply-format guidance still comes. On kiro-cli,
+KAS, Codex and Claude Code it comes with the first message of a conversation, and
+again after a compaction or when that guidance changes; on every other harness
+it comes with each message.
 To leave memory out of one chat, pick
 **Temporary** in the memory mode button above the message box before the first
 message ([Memory modes](memory-and-learning.md#memory-modes)).

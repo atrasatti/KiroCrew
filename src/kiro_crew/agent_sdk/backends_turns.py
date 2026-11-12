@@ -473,6 +473,26 @@ ACP_BACKENDS_SENT_IMAGE_RECORD = frozenset(
     {ACP_BACKEND_KIRO, ACP_BACKEND_KAS, ACP_BACKEND_CODEX, ACP_BACKEND_CLAUDE}
 )
 
+# The harnesses whose compaction Kiro Crew sees: whether Crew or the harness
+# itself starts it, a frame this client reads arrives. Anything Crew sends once
+# per conversation and sends again after a compaction rests on that, so this is
+# the name such a record gates on. It IS the set above, under the name of what
+# it means, never a second list: a harness joins both by joining that one, on
+# the evidence written there
+# (``acp_frames/kiro/compaction-live.jsonl``,
+# ``acp_frames/kas/auto-compaction-live.jsonl``,
+# ``acp_frames/codex/compact-live.jsonl``, and claude's standard ACP
+# ``compaction_update``).
+#
+# Its one reader is the reply-format rules record
+# (``context_assembly.delivery_records._reply_format_due``, through
+# ``LLMProvider.reports_compaction``): in the set the rules ride a
+# conversation's first message and the first after a compaction; outside it, and
+# on a harness that is not known, they ride every message, so a compaction the
+# harness ran on its own can never leave a conversation without them
+# (harness-parity H6).
+ACP_BACKENDS_COMPACTION_REPORTED = ACP_BACKENDS_SENT_IMAGE_RECORD
+
 # How long each backend's provider keeps a conversation's prompt prefix cached
 # after the last request, in seconds, for ``session.idle_compaction``. A backend
 # absent from the table, or whose resolver answers ``None``, has a lifetime Crew

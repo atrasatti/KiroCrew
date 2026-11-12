@@ -612,6 +612,12 @@ OFF_CARD_SETS: Mapping[str, str] = {
         "carries one more copy, and a wrong membership is a defect -- a picture a "
         "silent compaction dropped would be withheld"
     ),
+    "ACP_BACKENDS_COMPACTION_REPORTED": (
+        "whether the reply-format rules ride a conversation's first message and the "
+        "first after a compaction, or every message. The model has the rules either "
+        "way; outside the set each message carries one more copy, and a wrong "
+        "membership is a defect -- rules a silent compaction dropped would not return"
+    ),
     "ACP_BACKENDS_HARNESS_MANAGED_COMPACTION": (
         "what answers a full context on a harness Crew cannot hand /compact to. The "
         "card already reports whether /compact works, which is the part a reader "

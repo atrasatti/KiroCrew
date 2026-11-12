@@ -945,11 +945,11 @@ def build_message(
     if action_context:
         parts.append(ctx._neutralize_structural_markers(action_context) + "\n\n")
 
-    # Per-turn guidance (~1.8K chars) goes before the current-request boundary,
-    # so the request stays at the prompt's recency edge; trailing it lets the
-    # model drift back to an older question in long conversations. A
+    # The reply-format guidance (~1.8K chars) goes before the current-request
+    # boundary, so the request stays at the prompt's recency edge; trailing it lets
+    # the model drift back to an older question in long conversations. A
     # context-free turn has no request header and starts with the raw user text,
-    # so its guidance trails.
+    # so its guidance trails. Whether a message carries it is decided below.
     _interactive_guidance = _turn.interactive_guidance(
         interactive=interactive,
         session_key=session_key,
@@ -963,6 +963,23 @@ def build_message(
     # Only a call with no session key keeps the user-text-first order.
     _has_native_history = bool(session_key and (resumed or not is_new_session))
     _guidance_precedes_request = bool(parts) or _has_native_history
+    # The marked rules block rides the message only while the engine conversation
+    # does not hold it: its first message, a compaction, or changed rules. That
+    # needs Kiro Crew to hear of every compaction, so it holds only on a harness
+    # that reports its own (H6: only a provider that says so; one that does not,
+    # or no provider, means no);
+    # everywhere else the block rides every message. Asked on
+    # EVERY build, so a turn that carries no block (a non-interactive one, or one
+    # whose guidance trails unmarked) still drops a record its lifecycle
+    # invalidates. The marker scrub below is not part of this decision.
+    _rules_due = self._reply_format_due(
+        skill_bodies_session,
+        "".join(_interactive_guidance) if _guidance_precedes_request else "",
+        reset=is_new_session or needs_reinjection or conversation_reset,
+        # ``is True``: a provider view that does not say, and any stand-in whose
+        # attributes answer truthy to everything, is "not known".
+        compaction_seen=getattr(context_provider, "reports_compaction", False) is True,
+    )
 
     # The actual message (possibly modified by transform hook)
     if _guidance_precedes_request:
@@ -993,7 +1010,7 @@ def build_message(
         # non-interactive automation and markers split across adjacent
         # sources are covered without relying on per-call-site memory.
         parts[:] = [ctx._neutralize_reply_format_markers("".join(parts))]
-        if _guidance_precedes_request and _interactive_guidance:
+        if _rules_due:
             parts.append(ctx._REPLY_FORMAT_RULES_MARKER + "\n")
             parts.extend(_interactive_guidance)
         parts.append("[CURRENT USER REQUEST — respond to this]\n")
