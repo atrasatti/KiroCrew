@@ -3291,6 +3291,18 @@ export const SETTINGS_REGISTRY: SettingEntry[] =
     "label": "Governance Policy"
   },
   {
+    "id": "security.hide-credentials-from-the-ai-model-and-server-logs",
+    "labelKey": "pages.settings.securityPanel.credential_redaction_seams_toggle",
+    "tab": "security",
+    "type": "toggle",
+    "occurrence": 1,
+    "params": {
+      "section": "redaction"
+    },
+    "label": "Hide credentials from the AI model and server logs",
+    "description": "Off lets credentials reach the AI model and appear in server logs. Chats, Slack and saved secrets stay protected either way."
+  },
+  {
     "id": "security.how-long-auto-approve-stays-on",
     "labelKey": "pages.settings.securityPanel.yolo_duration_title",
     "tab": "security",
@@ -3301,6 +3313,18 @@ export const SETTINGS_REGISTRY: SettingEntry[] =
     },
     "configKey": "agent.yolo_duration",
     "label": "How long auto-approve stays on"
+  },
+  {
+    "id": "security.keep-ids-readable",
+    "labelKey": "pages.settings.securityPanel.credential_redaction_engine_toggle",
+    "tab": "security",
+    "type": "toggle",
+    "occurrence": 1,
+    "params": {
+      "section": "redaction"
+    },
+    "label": "Keep IDs readable",
+    "description": "Secrets are always hidden. Turn off to also hide AWS key IDs, commit SHAs and request IDs."
   },
   {
     "id": "security.live-security-posture",

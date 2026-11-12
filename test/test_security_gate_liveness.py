@@ -778,7 +778,15 @@ def _url_payload_command(n: int) -> str:
 #: Raised by 5, from 35,534, for the ``update-staging`` entry in the home fence: the
 #: self-update engine's wheel staging directory moved out of ``trust/`` to its own
 #: top-level masked leaf, and the file-tool gate covers it as it covered ``trust/``.
-_PACKAGE_LINE_BUDGET = 35_539
+#: Raised by 201, from 35,539, for turning the structured detectors on and for the
+#: owner's two settings in ``redaction_switch``: ``redaction`` reads pass 1 through
+#: the detectors' residual matches, ``text_redaction`` holds the detectors' tail and
+#: releases it at a display boundary, and the keystone record carries the engine
+#: selector and the output-seams switch (its field, parse and writer, a stored-record
+#: read every writer shares so each keeps the others' fields, and the governance rule
+#: every writer returns). The detectors and the seams table live outside the files
+#: this budget counts. Re-measured.
+_PACKAGE_LINE_BUDGET = 35_740
 
 #: Ceiling on any ONE file in the package. This is what the bound is really for --
 #: a package total says nothing about a single file growing back into a second

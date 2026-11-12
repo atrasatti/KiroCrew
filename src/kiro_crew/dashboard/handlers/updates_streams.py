@@ -134,11 +134,31 @@ class _QueueLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            msg = self.format(record)
+            msg = _stream_safe(self.format(record))
             data = json.dumps({"level": record.levelname, "msg": msg})
             self._queue.put_nowait(data)
         except Exception:
             pass
+
+
+def _stream_safe(msg: str) -> str:
+    """*msg* as the live log stream may carry it.
+
+    The stream reaches every dashboard-user socket and ``log``-scoped apps, not only
+    the owner, so it is not an output seam: with the owner's seams switch off (the
+    record factory then skips its shape passes) the line is redacted here, in a fresh
+    context so a record logged inside another bypassed seam is redacted too.
+    """
+    from kiro_crew import redaction_seams
+
+    if not redaction_seams.seams_off():
+        return msg
+    import contextvars
+
+    from kiro_crew.log_redaction import redact_log_shapes
+    from kiro_crew.security import redact
+
+    return contextvars.Context().run(lambda: redact(redact_log_shapes(msg)))
 
 
 # ── Persistent log ring buffer ──
@@ -207,7 +227,7 @@ class _RingLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            msg = self.format(record)
+            msg = _stream_safe(self.format(record))
             data = json.dumps({"level": record.levelname, "msg": msg})
             self._ring.append(data)
             # Push to WS log subscribers. emit() runs on ARBITRARY threads (any
