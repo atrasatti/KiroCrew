@@ -71,10 +71,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import itertools
 import json
 import logging
 import os
-import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -168,12 +168,31 @@ _PROJECT_KEYS_SQL: Final = (
 
 #: Key words that mark a ``project.*`` row as work state: the status of a PR, issue,
 #: CI run, branch, round or SHA, a next step, a blocker, a worktree or scratch path.
-_STATE_KEY = re.compile(
-    r"(?:^|[._])(?:pr|prs|pr_number|pr_status|issue|issues|ci|checks|branch|round|sha|head"
-    r"|status|next_action|next_step|next_steps|pending|blocked|blocker|worktree|scratch"
-    r"|in_progress|wip)(?:$|[._0-9])"
+_STATE_WORDS: Final = frozenset(
+    {
+        "pr",
+        "prs",
+        "issue",
+        "issues",
+        "ci",
+        "checks",
+        "branch",
+        "round",
+        "sha",
+        "head",
+        "status",
+        "pending",
+        "blocked",
+        "blocker",
+        "worktree",
+        "scratch",
+        "wip",
+    }
 )
-_DIGITS = re.compile(r"[0-9]+")
+_STATE_PAIRS: Final = frozenset(
+    {"pr_number", "pr_status", "next_action", "next_step", "next_steps", "in_progress"}
+)
+_ASCII_DIGITS: Final = "0123456789"
 
 #: Background session keys: a turn under one of these keeps nobody waiting.
 _BACKGROUND_PREFIXES: Final = ("cron:", "subagent:", "taskrunner:", "wf-author:", "wf-pool:")
@@ -311,12 +330,36 @@ def _rule_text(row: Row) -> str:
 
 def is_work_state_key(key: str) -> bool:
     """Whether ``project.*`` *key* names work state another system already holds."""
-    return key.startswith("project.") and _STATE_KEY.search(key) is not None
+    if not key.startswith("project."):
+        return False
+    parts = key[len("project.") :].replace(".", "_").split("_")
+    for i, part in enumerate(parts):
+        if _before_digit(part) in _STATE_WORDS:
+            return True
+        if i + 1 < len(parts) and f"{part}_{_before_digit(parts[i + 1])}" in _STATE_PAIRS:
+            return True
+    return False
+
+
+def _before_digit(part: str) -> str:
+    """*part* up to its first ASCII digit."""
+    for i, c in enumerate(part):
+        if c in _ASCII_DIGITS:
+            return part[:i]
+    return part
 
 
 def family_of(key: str) -> str | None:
     """*key* with every number replaced by ``#``, or ``None`` when it has no number."""
-    return _DIGITS.sub("#", key) if _DIGITS.search(key) else None
+    out: list[str] = []
+    found = False
+    for is_digit, run in itertools.groupby(key, lambda c: c in _ASCII_DIGITS):
+        if is_digit:
+            out.append("#")
+            found = True
+        else:
+            out.extend(run)
+    return "".join(out) if found else None
 
 
 def find_candidates(
