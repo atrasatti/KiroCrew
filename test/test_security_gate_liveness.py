@@ -787,7 +787,11 @@ def _url_payload_command(n: int) -> str:
 #: ``is_denied`` opens, in a leaf module with ``once_per_call`` on the pure readers one
 #: judgement repeats (shell tokens, program basename, operand, self-program test, line
 #: fold, Python lexer, quoted scripts). Same verdicts, less work. Re-measured.
-_PACKAGE_LINE_BUDGET = 35_712
+#: Raised by 54, from 35,712, for ``argv_floor_ssh``: a glob program word is walked
+#: once per ssh-family verb it can name (``_ssh_family_verbs``, ``_frame_verb_choices``),
+#: and ``_shares_nested_verdicts`` judges each nested payload once per outer call so
+#: those walks do not multiply. Nothing is relaxed. Re-measured.
+_PACKAGE_LINE_BUDGET = 35_766
 
 #: Ceiling on any ONE file in the package. This is what the bound is really for --
 #: a package total says nothing about a single file growing back into a second
