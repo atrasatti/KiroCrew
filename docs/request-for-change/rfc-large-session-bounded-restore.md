@@ -5,7 +5,7 @@ author: kirocrew agent session, directed by chenmingwei23
 created: 2026-11-12
 last-audited: 2026-11-12
 audited-at: 029b6db029
-doc-pr: 0
+doc-pr: 35916
 implementation-prs: []
 tracking-issues: [35875]
 supersedes: []
@@ -26,7 +26,7 @@ Measured on current main, the open-tab restore is no longer the 103 s the issue 
 2. The restore order is by transcript mtime, not by what the user is looking at, so the focused tab can be the 9th tab and wait.
 3. Crew-log slot folds. A cold fold walks the slot's whole unit once PER FOLD: 18 folds over a 136 MB unit took 91 s and read 8.4 GB. A stale savepoint (half the unit behind) still took 47 s (42 s with #35840).
 
-This RFC proposes four changes. Three are pure performance with identical outputs. The behaviour changes are listed in their own section (section 3).
+This RFC proposes four changes. Section 1.3 is pure performance with identical outputs, and section 1.4 adds tests only. Sections 1.1 and 1.2 are behaviour changes, listed in section 3. Section 6 gives how they are delivered.
 
 ## Measurements
 
@@ -138,7 +138,18 @@ Everything not listed here is pure performance with identical outputs.
 
 1. Accept the 16 MB threshold and the 500-row window, or set others.
 2. Accept the three behaviour changes in section 3.
-3. Accept section 1.3 (one walk per slot) as part of this work, or split it into its own issue.
+3. Decided: section 1.3 is delivered as its own pull request (section 6).
+
+## 6. Delivery plan
+
+Each part lands as its own pull request. This document is the plan; none of them is in this pull request.
+
+| Part | Kind | Pull request | Gate |
+|---|---|---|---|
+| 1.1 Tail window over 16 MB | behaviour change | separate, after review | review approval of this document first; no code before it |
+| 1.2 Focus-first restore order | behaviour change | separate, after review | review approval of this document first; no code before it |
+| 1.3 One walk per slot | pure performance, identical outputs | separate | fold values equal the per-fold path for every registered fold |
+| 1.4 CI fixture at the threshold | tests only | separate | counts, not wall time |
 
 ## Appendix: line citations
 
