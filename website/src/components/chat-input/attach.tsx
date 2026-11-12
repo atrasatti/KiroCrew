@@ -12,6 +12,8 @@ import type { ComposerControl } from '../composerControl'
 import type { useComposerPickers } from '../../chat-core/composer/pickers'
 import type { ChatInputProps } from './props'
 import { useComposerUploadProgress } from '../../utils/composerSendHolds'
+import { IS_MAC, shortcutPlatform } from '../../hooks/useKeyboardShortcuts'
+import { chordMatchesEvent, shortcutEntry } from '../../lib/shortcutRegistry'
 
 /* The attach control at the head of the bottom row: the "+" drop-up (upload,
    screenshot, sketch, collapse, and the `/` `@` `$` shortcuts) on a pointer
@@ -151,6 +153,17 @@ export function usePlusMenu({ pickers, value, onChange, composerControl, fileInp
   return { plusOpen, setPlusOpen, sketchOpen, setSketchOpen, plusWrapRef, plusBtnRef, plusMenuRef, plusRect, togglePlus, openTrigger }
 }
 
+/** ⌘⇧U / Ctrl+Shift+U in the composer: the keyboard twin of the Upload file
+ *  tile, so the caller fires it only while that tile can be pressed. A key an
+ *  input method took (keyCode 229, e.g. IBus's Ctrl+Shift+U Unicode entry)
+ *  stays the input method's. */
+export function isUploadFileChord(e: React.KeyboardEvent): boolean {
+  const platform = shortcutPlatform()
+  const chord = shortcutEntry('upload-file')?.defaults[platform]
+  const ime = e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229
+  return !!chord && !ime && chordMatchesEvent(e, chord, platform)
+}
+
 /* Progress sits BESIDE the cancel control as text, not as a third button, so
    the row keeps max-two-buttons-per-row. It subscribes here, in the leaf, so a
    progress step re-renders this note and not the composer. The status span is
@@ -287,6 +300,7 @@ export function AttachMenu({ plus, onUploadFiles, uploading, onCancelUpload, upl
                 <button
                   type="button"
                   onClick={() => openPicker(false)}
+                  title={i18nT(IS_MAC ? 'components.chatInput.upload_file_title_mac' : 'components.chatInput.upload_file_title')}
                   {...uiLocation('composer.add-menu.upload')}
                   className="flex-1 flex flex-col items-center gap-1.5 px-2 py-3 rounded-lg border border-border bg-transparent hover:bg-bg-hover hover:border-border-strong transition-all cursor-pointer"
                 >
