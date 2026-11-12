@@ -372,7 +372,10 @@ class HeadingAwareChunker:
         # pulls in the whole channel stack.
         from kiro_crew.messaging.split import iter_fence_spans
 
-        heading_re = re.compile(r"^(#{1,6})\s+(.+)", re.MULTILINE)
+        # An empty heading ("#", "# ", or an empty Word Heading paragraph) still
+        # starts a section, with no title: ``\s+`` would cross the line break
+        # and take the next line's text as the title.
+        heading_re = re.compile(r"^(#{1,6})(?:[ \t]+(.*))?$", re.MULTILINE)
         spans = list(iter_fence_spans(text))
         splits = []
         k = 0
@@ -388,7 +391,7 @@ class HeadingAwareChunker:
 
         sections: list[tuple[str | None, int, str]] = []
         for i, match in enumerate(splits):
-            title = match.group(2).strip()
+            title = (match.group(2) or "").strip() or None
             start_pos = match.start()
             end_pos = splits[i + 1].start() if i + 1 < len(splits) else len(text)
             body = text[start_pos:end_pos]
