@@ -1104,6 +1104,10 @@ class TestRestart:
         out = capsys.readouterr().out
         assert "Gateway (pid 4242) did not exit within" in out
         assert "Not starting a replacement" in out
+        # The force hint is the platform's own command, never a POSIX one on Windows.
+        from kiro_crew.cli_server_stop import _force_stop_command
+
+        assert f"force it: {_force_stop_command([4242], posix_sep=', ')}" in out
         audit = mock_sel.log_api_access.call_args.kwargs
         assert audit["outcome"] == "denied"
         assert "reason=incumbent_still_running" in audit["resources"]
