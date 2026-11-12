@@ -96,11 +96,9 @@ describe('FilterChip contract', () => {
     expect(onClear).toHaveBeenCalledTimes(1)
   })
 
-  it('`paused` marks the chip without changing what the click does', () => {
-    // The sidebar's menu can lift every status filter at once. The chip then
-    // says so with a dashed border and a Pause glyph, and keeps its colour so it
-    // still reads as ITS filter. The click, its name and its tooltip are
-    // untouched: pausing never becomes a second meaning for the click.
+  it('`paused` without `onTogglePause` marks the chip without changing what the click does', () => {
+    // A chip that is not pausable stays one clear button: the dashed border and
+    // Pause glyph mark it, and the click, its name and its tooltip still clear.
     const onClear = vi.fn()
     const { getByTestId } = render(
       <FilterChip label="Starred (2)" color="var(--accent)" paused clearLabel="Clear Starred filter" onClear={onClear} testId="p" />,
@@ -113,6 +111,41 @@ describe('FilterChip contract', () => {
     expect(chip.textContent).toBe('Starred (2)')
     fireEvent.click(chip)
     expect(onClear).toHaveBeenCalledTimes(1)
+  })
+
+  it('`onTogglePause` splits the chip: the body pauses or resumes, only the X clears', () => {
+    const onClear = vi.fn()
+    const onTogglePause = vi.fn()
+    const chip = (paused: boolean) => (
+      <FilterChip
+        label="Starred (2)" color="var(--accent)" paused={paused}
+        pauseLabel="Pause Starred filter" resumeLabel="Resume Starred filter"
+        onTogglePause={onTogglePause} clearLabel="Clear Starred filter" onClear={onClear} testId="p"
+      />
+    )
+    const { getByTestId, rerender } = render(chip(false))
+    const toggle = getByTestId('p-toggle')
+    expect(toggle.getAttribute('aria-label')).toBe('Pause Starred filter')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(toggle.textContent).toBe('Starred (2)')
+    fireEvent.click(toggle)
+    expect(onTogglePause).toHaveBeenCalledTimes(1)
+    expect(onClear).not.toHaveBeenCalled()
+
+    rerender(chip(true))
+    expect(getByTestId('p').className.split(/\s+/)).toContain('border-dashed')
+    expect(getByTestId('p').getAttribute('style')).toContain('var(--accent)')
+    expect(getByTestId('p-toggle').getAttribute('aria-pressed')).toBe('true')
+    expect(getByTestId('p-toggle').getAttribute('title')).toBe('Resume Starred filter')
+    // The paused glyph is Play, what the click does next, never Pause.
+    expect(getByTestId('p-toggle').querySelector('.lucide-play')).not.toBeNull()
+    expect(getByTestId('p').querySelector('.lucide-pause')).toBeNull()
+
+    const clear = getByTestId('p-clear')
+    expect(clear.getAttribute('aria-label')).toBe('Clear Starred filter')
+    fireEvent.click(clear)
+    expect(onClear).toHaveBeenCalledTimes(1)
+    expect(onTogglePause).toHaveBeenCalledTimes(1)
   })
 
   it('the aggregate variant is the neutral clear-all pill: no filter colour, the sidebar tag chip\'s chrome', () => {
