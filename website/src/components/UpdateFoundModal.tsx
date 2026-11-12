@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Trans } from 'react-i18next'
 import MarkdownRenderer from './MarkdownRenderer'
 import ErrorNotice from './ErrorNotice'
@@ -236,7 +236,10 @@ export default function UpdateFoundModal({ held = false }: { held?: boolean } = 
   // The agent hand-off is one more dismissal, so it is confined to the
   // voluntary branch: a mandatory prompt that a failed apply could wave away
   // would enforce nothing.
-  const open = !!candidate && !held
+  // Settings > About already shows this update with its notes and controls, so
+  // the popup would cover the page it points the reader to.
+  const onAboutPage = useLocation().pathname.replace(/\/+$/, '') === '/settings/about'
+  const open = !!candidate && !held && !onAboutPage
     && (required || (
       !handedOff
       && recordLoaded

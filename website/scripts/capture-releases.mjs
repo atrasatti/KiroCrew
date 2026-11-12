@@ -35,7 +35,7 @@ const WIDE = { width: 1440, height: 1000 }
 const NARROW = { width: 390, height: 844 }
 
 const FIXTURES = realReleasePayloads([
-  ['stable', '0.12.1'],
+  ['stable', '0.12.2'],
   ['nightly', '0.13.0-nightly.20261111t060622'],
 ])
 
@@ -121,6 +121,22 @@ for (const theme of ['light', 'dark']) {
   }
 }
 
+// 4b. Up to date on stable, wide and narrow.
+for (const [label, size] of [['wide', WIDE], ['narrow', NARROW]]) {
+  const { page, context } = await open({ size })
+  await shot(page, `${label}-light-uptodate`, { fullPage: true })
+  await context.close()
+}
+
+// 4c. The old bare /settings/releases address lands on the release notes section.
+{
+  const { page, context } = await open({ path: '/settings/releases' })
+  await page.waitForTimeout(500)
+  console.log('  landed on', page.url())
+  await shot(page, 'redirect-bare-releases')
+  await context.close()
+}
+
 // 5. A nightly build: the running release is unreleased and badged.
 {
   const { page, context } = await open({ rel: 'nightly' })
@@ -153,13 +169,13 @@ for (const theme of ['light', 'dark']) {
   const { page, context } = await open({ update: true })
   await page.getByTestId('update-changes-load').scrollIntoViewIfNeeded()
   await shot(page, 'wide-light-update-load-offer')
-  // 9. The check answered with no changelog lines: the no-notes state.
+  // 9. The check answered with no changelog lines: "no changelog entries".
   await context.close()
 }
 {
   const { page, context } = await open({ update: true, notes: false })
   await page.getByTestId('update-changes-load').click()
-  await page.waitForSelector('[data-testid="update-changes-empty"]')
+  await page.waitForSelector('[data-testid="update-changes-none"]')
   await shot(page, 'wide-light-update-no-notes')
   await context.close()
 }

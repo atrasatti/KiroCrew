@@ -417,11 +417,14 @@ floor raises the declared one. The step fails closed when the ZIP names no floor
 one with no exact kernel version (a non-`.0` macOS 11+ floor).
 
 Every channel file, on every platform, also carries `releaseNotes`: the version's
-`CHANGELOG.md` section, which the desktop app shows for a pending update before the
-user installs it. `scripts/feed_release_notes.py` picks the section the way
-the release notes in Settings > About do (`0.4.0-insider.14` reads `## [0.4.0]`) and prints it as one
-JSON string, which is also a YAML double-quoted scalar, so no changelog text can
-break the file. A version with no section, in practice a nightly, gets `""`.
+`CHANGELOG.md` section followed by up to four released sections before it, each under
+its own `## [X.Y.Z]` heading. The desktop app keeps the sections newer than the build
+it runs and shows them for a pending update before the user installs it.
+`scripts/feed_release_notes.py` picks the version's section the way the release notes
+in Settings > About do (`0.4.0-insider.14` reads `## [0.4.0]`) and prints the result as
+one JSON string, which is also a YAML double-quoted scalar, so no changelog text can
+break the file. A version with no section, in practice a nightly, starts at the newest
+released section below it.
 
 Every public URL is exactly one of two classes, and the class decides the cache
 policy:

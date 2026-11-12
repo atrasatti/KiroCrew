@@ -41,8 +41,8 @@ function withNudgeConfig(record: Record<string, unknown> | undefined) {
   mockedApi.kirocrewConfig.mockResolvedValue({ dashboard: { update_nudge: record } } as never)
 }
 
-async function mount(initial?: UpdateState, store = createTestStore(), ui: ReactElement = <UpdateFoundModal />) {
-  const rendered = renderWithProviders(ui, { store })
+async function mount(initial?: UpdateState, store = createTestStore(), ui: ReactElement = <UpdateFoundModal />, route = '/') {
+  const rendered = renderWithProviders(ui, { store, route })
   const push = async (next: UpdateState) => {
     await act(async () => { rendered.queryClient.setQueryData(['update-state'], next) })
   }
@@ -111,6 +111,11 @@ describe('UpdateFoundModal — desktop source', () => {
     expect(screen.getByText('9.9.9')).toBeInTheDocument()
     expect(screen.getByText('zzq release notes')).toBeInTheDocument()
     expect(byName('components.updateFoundModal.download')).toBeInTheDocument()
+  })
+
+  it('stays closed on Settings > About, which already shows the update', async () => {
+    await mount(found, createTestStore(), <UpdateFoundModal />, '/settings/about')
+    expect(dialog()).toBeNull()
   })
 
   it('never opens for a replayed payload', async () => {

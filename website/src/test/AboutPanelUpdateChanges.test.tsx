@@ -1,8 +1,19 @@
 // About > Updates: "What you'd get", the changes an available update brings.
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
+import { render as rtlRender, screen, cleanup, within, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactElement } from 'react'
 import { AboutPanelUpdateChanges } from '../pages/settings/AboutPanelUpdateChanges'
-import { changeEntries } from '../pages/settings/updateChanges'
+import { archiveNotes, changeEntries, notesSince } from '../pages/settings/updateChanges'
+
+/** The component reads the shared ['releases'] cache; `archive` seeds it. */
+function render(ui: ReactElement, archive: unknown = { releases: [] }) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  qc.setQueryData(['releases'], archive)
+  const wrap = (node: ReactElement) => <QueryClientProvider client={qc}>{node}</QueryClientProvider>
+  const utils = rtlRender(wrap(ui))
+  return { ...utils, rerender: (next: ReactElement) => utils.rerender(wrap(next)) }
+}
 
 /** Shaped like a real CHANGELOG.md section: bullets with bold leads, then bold-led fix paragraphs. */
 const SECTION = [
@@ -44,6 +55,44 @@ describe('changeEntries', () => {
   it('finds nothing in prose alone or in an empty string', () => {
     expect(changeEntries('')).toEqual([])
     expect(changeEntries('Just a summary paragraph.\nThat wraps.')).toEqual([])
+  })
+})
+
+describe('notesSince', () => {
+  const FEED = '## [0.13.0] - 2026-11-20\n\n- a\n\n## [0.12.1] - 2026-11-09\n\n- b\n\n## [0.12.0] - 2026-11-05\n\n- c'
+
+  it('keeps the sections newer than the running build and calls them a range', () => {
+    expect(notesSince(FEED, '0.12.0')).toEqual({
+      notes: '## [0.13.0] - 2026-11-20\n\n- a\n\n## [0.12.1] - 2026-11-09\n\n- b',
+      sinceBuild: true,
+    })
+  })
+
+  it('keeps the running release\u2019s own section for a prerelease of it', () => {
+    expect(notesSince(FEED, '0.13.0-insider.2').notes).toBe('## [0.13.0] - 2026-11-20\n\n- a')
+    expect(notesSince(FEED, '0.13.0').notes).toBe('')
+  })
+
+  it('passes headingless notes from an older feed through as one release', () => {
+    expect(notesSince('- only', '0.1.0')).toEqual({ notes: '- only', sinceBuild: false })
+  })
+})
+
+const ARCHIVE = {
+  releases: [
+    { version: '0.13.1', date: '2026-11-25', body: '- **Even newer**: z', is_current: false },
+    { version: '0.13.0', date: '2026-11-20', body: '- **From the archive**: a', is_current: false },
+    { version: '0.12.1', date: '2026-11-09', body: '- **Installed**: b', is_current: true },
+  ],
+}
+
+describe('archiveNotes', () => {
+  it('takes the sections newer than the running release, up to the update', () => {
+    expect(archiveNotes(ARCHIVE.releases, '0.13.0')).toBe('## [0.13.0] - 2026-11-20\n\n- **From the archive**: a')
+  })
+
+  it('has nothing when the list stops at the running build', () => {
+    expect(archiveNotes([ARCHIVE.releases[2]], '0.13.0')).toBe('')
   })
 })
 
@@ -93,6 +142,36 @@ describe('AboutPanelUpdateChanges', () => {
     render(<AboutPanelUpdateChanges notes={'- **A**: x\n- **B**: y'} version="0.13.0" />)
     expect(screen.getByTestId('update-changes')).toHaveTextContent("What's in 0.13.0 (2 changes)")
     expect(screen.getByTestId('update-changes')).not.toHaveTextContent('since your build')
+  })
+
+  it('still shows notes with nothing to count, under a title with no count', () => {
+    render(<AboutPanelUpdateChanges notes="A small patch that fixes one crash." version="0.13.0" sinceBuild />)
+    const section = screen.getByTestId('update-changes')
+    expect(screen.getByText("What you'd get")).toBeInTheDocument()
+    expect(screen.queryByTestId('update-changes-list')).toBeNull()
+    expect(screen.queryByTestId('update-changes-empty')).toBeNull()
+    fireEvent.click(screen.getByText('Read the full notes'))
+    expect(within(section).getByText('A small patch that fixes one crash.')).toBeInTheDocument()
+  })
+
+  it('names its section by the visible title', () => {
+    render(<AboutPanelUpdateChanges notes="- **A**: x" version="0.13.0" sinceBuild />)
+    expect(screen.getByRole('region', { name: "What you'd get (1 change since your build)" })).toBeInTheDocument()
+    expect(screen.getByTestId('update-changes')).not.toHaveAttribute('aria-label')
+  })
+
+  it('says a checked source carried no entries', () => {
+    render(<AboutPanelUpdateChanges notes="" version="0.13.0" sinceBuild checked />)
+    expect(screen.getByTestId('update-changes-none')).toHaveTextContent('No changelog entries between your build and this update.')
+    expect(screen.queryByTestId('update-changes-empty')).toBeNull()
+  })
+
+  it('falls back to this install\u2019s release list when the update carries no notes', () => {
+    render(<AboutPanelUpdateChanges notes="" version="0.13.0" onLoad={() => {}} />, ARCHIVE)
+    expect(screen.getByTestId('update-changes')).toHaveTextContent("What you'd get (1 change since your build)")
+    expect(within(screen.getByTestId('update-changes-list')).getByText('From the archive')).toBeInTheDocument()
+    expect(screen.queryByTestId('update-changes-load')).toBeNull()
+    expect(screen.queryByRole('link', { name: /GitHub/ })).toBeNull()
   })
 
   it('says the notes are not shown, and links the release, when the update carries none', () => {
