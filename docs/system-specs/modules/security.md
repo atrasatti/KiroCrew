@@ -3951,6 +3951,8 @@ claimed after its servers started is named that way. The managed-tool-policy rea
 goes over the same capability when one is held: with the masked secret it would be
 refused, and that refusal reads as no exclusions, which would let a capability-backed
 call run a tool the operator excluded.
+A server that holds a pickup never asks its gateway for a relayed tool list
+(`mcp_listing_relay.fetch_listing`): it builds its own list, through this read.
 While it holds a capability, `mcp_core_parts.gateway._api_urlopen` sends every request
 to the agent socket through `unix_socket_urlopen` with `X-Ipc-Capability` and without
 `X-Internal-Secret`; it never falls back to TCP. No pickup, or one the gateway
