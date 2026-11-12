@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, onTestFinished, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import { render, screen, act, fireEvent } from '@testing-library/react'
-import ChatFooter, { pickDistinct, resolveLoader, resolveLoaderIcons, SwapCarousel, STREAM_IDLE_MS, STALL_MS, transcriptActivityKey, turnSentHere } from '../pages/chat/ChatFooter'
+import ChatFooter, { pickDistinct, resolveLoader, resolveLoaderIcons, SwapCarousel, STREAM_IDLE_MS, STALL_MS, allToolCallsReturned, transcriptActivityKey, turnSentHere } from '../pages/chat/ChatFooter'
 import { GHOST_POSE_ICONS, GHOST_POSE_URLS } from '../components/GhostPoses'
 import { registerThemeBranding } from '../themeBranding'
 import { THEME_LOADER_ICONS } from '../themeLoaderIcons'
@@ -624,6 +624,20 @@ describe('ChatFooter stall notice', () => {
     rerender(<ChatFooter {...quiet} />)
     act(() => { vi.advanceTimersByTime(STALL_MS * 4) })
     expect(screen.queryByTestId('chat-footer-stall')).toBeNull()
+  })
+
+  // The slot reads tool_running from a tool row until the next text chunk, so
+  // only the tool log can say the call returned and the quiet is the model's.
+  it('watches a turn still reading tool_running once every tool call returned', () => {
+    const call = { type: 'tool', text: 'read', ts: 1 }
+    expect(allToolCallsReturned([])).toBe(false)
+    expect(allToolCallsReturned([{ ...call, output: 'ok' }, call])).toBe(false)
+    expect(allToolCallsReturned([{ ...call, output: 'stdout so far', output_partial: true }])).toBe(false)
+    expect(allToolCallsReturned([{ ...call, output: 'ok' }, { ...call, output_partial: false }, { ...call, rejected: true }, { type: 'approval', text: 'run', ts: 2 }])).toBe(true)
+    fakeClock()
+    renderLive(r => <ChatFooter {...quiet} running={r} state="tool_running" lastRole="tool" activityKey={'3:tool:10'} toolsReturned />)
+    act(() => { vi.advanceTimersByTime(STALL_MS) })
+    expect(screen.getByTestId('chat-footer-stall')).toBeTruthy()
   })
 
   // A turn parked on the person's approval or question is healthy: no frames
