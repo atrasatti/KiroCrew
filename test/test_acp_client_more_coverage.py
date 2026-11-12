@@ -332,8 +332,10 @@ class TestProcessTreeHelpers:
 
     def test_direct_children_falls_back_to_pgrep(self, monkeypatch):
         calls: list[list[str]] = []
-        # A kernel without the per-task children files is the one case pgrep answers.
+        # A kernel without the per-task children files, or a macOS whose libproc
+        # cannot be asked, is the case pgrep answers.
         monkeypatch.setattr(runtime_process_tree, "_CHILDREN_INTERFACE", False)
+        monkeypatch.setattr(acp_client.platform_compat, "darwin_child_pids", lambda _pid: None)
 
         def _fake_check_output(cmd, **kwargs):
             calls.append(cmd)
@@ -345,6 +347,7 @@ class TestProcessTreeHelpers:
 
     def test_direct_children_swallows_pgrep_failure(self, monkeypatch):
         monkeypatch.setattr(runtime_process_tree, "_CHILDREN_INTERFACE", False)
+        monkeypatch.setattr(acp_client.platform_compat, "darwin_child_pids", lambda _pid: None)
 
         def _boom(cmd, **kwargs):
             raise OSError("no pgrep")
@@ -374,11 +377,13 @@ class TestProcessTreeHelpers:
 
     def test_basename_none_without_trusted_ps(self, monkeypatch):
         monkeypatch.setattr(acp_client.sys, "platform", "darwin")
+        monkeypatch.setattr(acp_client.platform_compat, "darwin_process_argv", lambda _pid: None)
         monkeypatch.setattr(acp_client.platform_compat, "trusted_system_bin", lambda name: None)
         assert _read_basename(999) is None
 
     def test_basename_none_when_ps_reports_nothing(self, monkeypatch):
         monkeypatch.setattr(acp_client.sys, "platform", "darwin")
+        monkeypatch.setattr(acp_client.platform_compat, "darwin_process_argv", lambda _pid: None)
         monkeypatch.setattr(
             acp_client.platform_compat, "trusted_system_bin", lambda name: "/bin/ps"
         )

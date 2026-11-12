@@ -708,7 +708,11 @@ _POSIX_PS = SimpleNamespace(
     IS_WINDOWS=False,
     trusted_system_bin=lambda _name: "/bin/ps",
     proc_phys_footprint_bytes_for_pid=lambda _pid: None,
+    # The kernel's argument record cannot be read, so the name comes from ``ps``.
+    darwin_process_argv=lambda _pid: None,
 )
+# libproc cannot be asked, so the macOS walk reaches its ``pgrep`` fallback.
+_POSIX_NO_LIBPROC = SimpleNamespace(IS_WINDOWS=False, darwin_child_pids=lambda _pid: None)
 _LINUX = SimpleNamespace(platform="linux")
 _DARWIN = SimpleNamespace(platform="darwin")
 
@@ -723,7 +727,7 @@ _MODULE_SEAMS: list[tuple[str, str, dict[str, object], str, tuple[object, ...]]]
     (
         "kiro_crew.acp.client",
         "subprocess_mod",
-        {"platform_compat": _POSIX, "sys": _DARWIN},
+        {"platform_compat": _POSIX_NO_LIBPROC, "sys": _DARWIN},
         "_direct_children",
         (1,),
     ),
@@ -828,7 +832,11 @@ def test_a_module_rebound_on_the_facade_reaches_the_moved_helper(
 
 @pytest.mark.parametrize(
     ("helper", "platform"),
-    [("_direct_children", _POSIX), ("_get_start_time", _POSIX_PS), ("_read_basename", _POSIX_PS)],
+    [
+        ("_direct_children", _POSIX_NO_LIBPROC),
+        ("_get_start_time", _POSIX_PS),
+        ("_read_basename", _POSIX_PS),
+    ],
 )
 def test_a_patched_spawn_call_reaches_the_client_s_process_probes(
     monkeypatch: pytest.MonkeyPatch, helper: str, platform: SimpleNamespace
@@ -1342,7 +1350,7 @@ _SEAM_IMPORTS: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
     ),
     ("kiro_crew.acp.runtime_process_tree", "_direct_children"): (
         "kiro_crew.acp.client",
-        ("Path", "subprocess_mod", "sys"),
+        ("Path", "platform_compat", "subprocess_mod", "sys"),
     ),
     ("kiro_crew.acp.runtime_process_tree", "_read_basename"): (
         "kiro_crew.acp.client",
@@ -1436,8 +1444,8 @@ def test_an_owner_reads_a_facade_only_for_the_listed_seams() -> None:
 
 #: A helper split out of a moved one reads the binding that one read, so its origin is
 #: the helper it came out of: ``walk_observes_descendants`` is the platform test
-#: ``_direct_children`` made itself. The read lives in the new helper alone:
-#: ``_SEAM_IMPORTS`` lists ``platform_compat`` for it and not for ``_direct_children``.
+#: ``_direct_children`` made itself. That read lives in the new helper alone;
+#: ``_direct_children`` reads ``platform_compat`` for its macOS child reader only.
 _SPLIT_FROM: dict[tuple[str, str], str] = {
     ("kiro_crew.acp.runtime_process_tree", "walk_observes_descendants"): "_direct_children",
 }

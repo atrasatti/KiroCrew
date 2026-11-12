@@ -45,7 +45,7 @@ _T = TypeVar("_T")
 def walk_observes_descendants() -> bool:
     """Whether ``_get_child_pids`` can see a descendant on this platform.
 
-    True on POSIX, where the walk reads ``/proc`` or asks ``pgrep``. False on
+    True on POSIX, where the walk reads ``/proc``, libproc or ``pgrep``. False on
     Windows: there is no pgrep, and the tree kill goes through the owned-handle
     drain and ``kill_process_tree`` (``taskkill /T``), which walk descendants
     themselves, so the records this walk feeds are a POSIX-only concern.
@@ -168,19 +168,23 @@ def _children_interface() -> bool:
 
 
 def _direct_children(pid: int) -> list[int]:
-    """Return direct child PIDs. Uses /proc on Linux, pgrep on other POSIX.
+    """Return direct child PIDs. Uses /proc on Linux, libproc on macOS, pgrep otherwise.
 
     On Linux the per-task ``children`` files, read by ``_read_task_children``, are
     the answer, empty included, so a leaf costs no spawn. proc(5) calls these files
     exact only for stopped children; the walk's callers
     absorb that race, since ``guarded_tree_pass`` walks twice and every later
-    pass walks again. pgrep is the fallback only for a
-    kernel without the files (``_CHILDREN_INTERFACE``).
+    pass walks again. On macOS ``proc_listchildpids`` answers in this process
+    (``platform_compat.darwin_child_pids``), empty included, less every child that
+    has ended (``darwin_pid_is_zombie``): pgrep never listed one, so the record is
+    the set it was. pgrep is the fallback for a Linux kernel without the files
+    (``_CHILDREN_INTERFACE``), for a macOS whose libproc cannot be asked or cannot
+    say whether a child has ended, and for any other POSIX.
 
     Returns ``[]`` where the walk cannot see a descendant
     (``walk_observes_descendants``).
     """
-    from kiro_crew.acp.client import Path, subprocess_mod, sys  # noqa: F811
+    from kiro_crew.acp.client import Path, platform_compat, subprocess_mod, sys  # noqa: F811
 
     if not walk_observes_descendants():
         return []
@@ -190,6 +194,18 @@ def _direct_children(pid: int) -> list[int]:
         # pushed a 6-leaf tree walked twice past the 3 s TREE_REFRESH_TIMEOUT.
         tasks_dir = Path(f"/proc/{pid}/task")
         return _read_task_children(tasks_dir.iterdir, lambda tid: (tid / "children").read_text())
+    if sys.platform == "darwin":
+        # pgrep -P costs a process start per pid, 10 to 13 ms each, and a session
+        # start walks its tree twice: 16 of them, one after the other, on the path
+        # the first prompt waits on. The same ppid match, read in this process.
+        children = platform_compat.darwin_child_pids(pid)
+        if children is not None:
+            # libproc also lists a child that has ended and is not collected yet;
+            # pgrep lists none, and the record must hold what it held. A state that
+            # cannot be read leaves the answer to pgrep.
+            ended = [platform_compat.darwin_pid_is_zombie(child) for child in children]
+            if None not in ended:
+                return [child for child, gone in zip(children, ended) if not gone]
     try:
         # timeout so a hung pgrep cannot occupy a subprocess_executor worker
         # indefinitely (the ps spawns in _get_start_time/_read_basename already
@@ -235,6 +251,12 @@ def _read_basename(pid: int) -> bytes | None:
     POSIX only in practice — the escaped-child sweep that consumes this value is a
     Windows no-op — but the helper still short-circuits on win32 (returning None)
     so a stray future caller doesn't crash trying to invoke ``ps`` / read /proc.
+
+    On macOS the name is the last path part of ``argv[0]``, which is what
+    ``ps -o comm=`` prints there: read from the kernel's own record in this process
+    (``platform_compat.darwin_process_argv``), and from ``ps`` when that record
+    cannot be read or holds a byte it cannot carry, so the name a record was
+    written with and the name it is compared with stay the same bytes.
     """
     from kiro_crew.acp.client import Path, platform_compat, subprocess_mod, sys  # noqa: F811
 
@@ -250,6 +272,12 @@ def _read_basename(pid: int) -> bytes | None:
                 return None
             return cmdline.split(b"\x00", 1)[0].rsplit(b"/", 1)[-1]
         else:
+            if sys.platform == "darwin":
+                argv = platform_compat.darwin_process_argv(pid)
+                # U+FFFD is a byte the decode could not carry: only ps has it.
+                own = argv[0].strip() if argv else ""
+                if own and "\ufffd" not in own:
+                    return own.encode("utf-8").rsplit(b"/", 1)[-1]
             ps_bin = platform_compat.trusted_system_bin("ps")
             if ps_bin is None:
                 return None
@@ -282,7 +310,7 @@ ChildRecord = tuple[str | None, bytes | None]
 def _capture_child_records(pids: list[int]) -> dict[int, ChildRecord]:
     """Capture (start_id, basename) for each pid as a ChildRecord map.
 
-    On macOS ``_read_basename`` shells out to ``ps`` (and ``_get_child_pids`` to
+    On macOS ``_read_basename`` can shell out to ``ps`` (and ``_get_child_pids`` to
     ``pgrep``), which can block during the subprocess spawn (fork/exec). Callers
     running on the event loop MUST invoke this via
     ``run_in_executor(subprocess_executor(), ...)`` so the spawns happen on a

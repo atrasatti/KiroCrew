@@ -189,6 +189,8 @@ class TestReadBasename:
         from kiro_crew.acp.client import _read_basename
 
         monkeypatch.setattr(sys, "platform", "darwin")
+        # The kernel's argument record cannot be read, so the name comes from ps.
+        monkeypatch.setattr(client_mod.platform_compat, "darwin_process_argv", lambda _pid: None)
         monkeypatch.setattr(
             client_mod.subprocess_mod,
             "check_output",
@@ -207,6 +209,7 @@ class TestReadBasename:
             raise subprocess.CalledProcessError(1, cmd)
 
         monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(client_mod.platform_compat, "darwin_process_argv", lambda _pid: None)
         monkeypatch.setattr(client_mod.subprocess_mod, "check_output", raise_error)
         assert _read_basename(999999) is None
 
