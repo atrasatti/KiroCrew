@@ -18,6 +18,7 @@ from kiro_crew.dashboard.chat_persistence import (
 )
 from kiro_crew.dashboard.chat_utils import CRON_NOTIFICATION_KIND, redact_display_content
 from kiro_crew.dashboard.chat_utils_slots import cron_tab_name
+from kiro_crew.dashboard.display_floor import DISPLAY_FLOOR_KEY, clip_to_floor, read_display_floor
 from kiro_crew.dashboard.slot_ownership import app_holds_gateway_key
 from kiro_crew.dashboard.state import (
     DashboardState,
@@ -25,7 +26,7 @@ from kiro_crew.dashboard.state import (
     note_crew_log_class,
     row_mid,
 )
-from kiro_crew.history import append_rows_if_absent_off_loop
+from kiro_crew.history import append_rows_if_absent_off_loop, latest_transcript_ts
 from kiro_crew.security import redact_credentials, redact_exfiltration_urls
 from kiro_crew.sel import sel
 
@@ -41,6 +42,7 @@ _DISMISSED_UNREAD: object = object()
 
 if TYPE_CHECKING:
     from kiro_crew.cron import CronJob
+    from kiro_crew.history import ConversationLog
 
 logger = logging.getLogger(__name__)
 
@@ -985,8 +987,77 @@ def _app_owned(slot: Any) -> bool:
     return isinstance(owner, str) and bool(owner)
 
 
+#: The ``closed_id`` of the close the person made with the tab's own close button.
+PERSON_CLOSE_KEY = "person_close_id"
+
+
+def note_person_close(log: "ConversationLog", key: str) -> None:
+    """Mark the close stamped on *key*'s line as the person's own.
+
+    Only such a close lets :func:`start_fresh_cron_tab` reopen a job tab empty:
+    the idle sweep, a bulk archive and an agent's close stamp ``closed`` the same
+    way and must not hide the person's history. Keyed by the close's
+    ``closed_id``, so a later close nobody marked does not inherit it.
+    """
+    meta, readable = log.get_metadata_status(key)
+    closed_id = meta.get("closed_id") if readable and meta.get("closed") else None
+    if isinstance(closed_id, str) and closed_id:
+        log.update_metadata_if(
+            key,
+            {PERSON_CLOSE_KEY: closed_id},
+            lambda current: current.get("closed_id") == closed_id,
+        )
+
+
+async def note_cron_tab_closed_by_person(state: DashboardState, slot: Any) -> None:
+    """Off-loop :func:`note_person_close` for a cron tab the person just closed."""
+    key = getattr(slot, "linked_session_key", "")
+    # Every other tab's close returns before the log is touched.
+    if not isinstance(key, str) or not key.startswith("cron:") or state.conversation_log is None:
+        return
+    try:
+        await asyncio.to_thread(note_person_close, state.conversation_log, key)
+    except Exception:
+        logger.warning(
+            "Cron tab %s: its close could not be marked as the person's", key, exc_info=True
+        )
+
+
+def start_fresh_cron_tab(log: "ConversationLog", job_id: str) -> bool:
+    """Hide a closed job tab's rows from the tab a run is about to reopen; True once hidden.
+
+    The ``on_tab_close="fresh"`` step, run off the loop right before the mint. It
+    acts only on a close the person made (:func:`note_person_close`), so an idle
+    sweep, a bulk archive, an agent's close or a restart never empties a tab. The
+    floor is the newest row's ``ts`` (``display_floor``), written only while that
+    close is still the line's latest. The rows stay in the transcript.
+    """
+    key = f"cron:{job_id}"
+    meta, readable = log.get_metadata_status(key)
+    closed_id = meta.get("closed_id") if readable and meta.get("closed") else None
+    # A close with no id (an older build's, or a failed resume's restored stamp)
+    # cannot be the person's.
+    if not isinstance(closed_id, str) or not closed_id or meta.get(PERSON_CLOSE_KEY) != closed_id:
+        return False
+    floor = latest_transcript_ts(*(row.get("ts") for row in log.read_messages_chained_tail(key, 1)))
+    if floor is None:
+        return False
+    return log.update_metadata_if(
+        key,
+        {DISPLAY_FLOOR_KEY: floor},
+        lambda current: bool(current.get("closed")) and current.get("closed_id") == closed_id,
+    )
+
+
+def read_cron_tab_rows(log: "ConversationLog", key: str) -> list[dict[str, Any]]:
+    """*key*'s rows for hydrating its tab: without those its display floor hides."""
+    rows = log.read_messages(key)
+    floor = read_display_floor(log, key)
+    return clip_to_floor(rows, 0, floor)[0] if floor else rows
+
+
 async def prefetch_cron_history(
-    state: DashboardState, job_id: str, session_key: str = ""
+    state: DashboardState, job_id: str, session_key: str = "", *, fresh: bool = False
 ) -> list[dict[str, Any]] | None:
     """Off-loop read of the ``cron:{id}`` transcript for the injection above.
 
@@ -1004,6 +1075,11 @@ async def prefetch_cron_history(
     stands down there (``slot_ownership.app_holds_gateway_key``) and consumes
     nothing either. ``session_key`` reads one ``new_chat_per_run`` run's
     transcript instead of the job's.
+
+    ``fresh`` is the job's ``on_tab_close="fresh"``: when it is about to mint the
+    job's own tab after the person closed it, :func:`start_fresh_cron_tab` hides
+    the old rows and the tab is hydrated with none. Rows an earlier fresh reopen
+    hid are never hydrated either.
     """
     if state.conversation_log is None:
         return None
@@ -1011,7 +1087,17 @@ async def prefetch_cron_history(
     slot = state.get_slot(cron_tab_name(history_key))
     if slot is not None and (slot.linked_session_key or _app_owned(slot)):
         return None
-    return await asyncio.to_thread(state.conversation_log.read_messages, history_key)
+    if fresh and not session_key and slot is None:
+        try:
+            if await asyncio.to_thread(start_fresh_cron_tab, state.conversation_log, job_id):
+                return []
+        except Exception:
+            logger.warning(
+                "Cron %s: its closed tab could not start fresh; it keeps its history",
+                job_id,
+                exc_info=True,
+            )
+    return await asyncio.to_thread(read_cron_tab_rows, state.conversation_log, history_key)
 
 
 async def prefetch_cron_dismissed(state: DashboardState, job_id: str) -> object:
@@ -1115,7 +1201,7 @@ async def ensure_cron_slot(state: DashboardState, job: "CronJob") -> None:
         await prefetch_cron_dismissed(state, job.id)
         await restore_cron_turn_timeout(state, job.id)
         return
-    history = await prefetch_cron_history(state, job.id)
+    history = await prefetch_cron_history(state, job.id, fresh=job.on_tab_close == "fresh")
     dismissed = await prefetch_cron_dismissed(state, job.id)
     _bind_cron_slot(state, job, history, dismissed, workspace=workspace)
     await restore_cron_turn_timeout(state, job.id)

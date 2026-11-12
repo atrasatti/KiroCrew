@@ -368,6 +368,15 @@ block sits between rows the page serves, so slot detail serves that page through
 `read_messages_chained_full` rather than leaving the block unreachable. A
 rotated-archive read that fails answers the retryable `503 history_corpus_unreadable`
 instead of a page that silently omits the archive.
+A transcript whose metadata line carries a `display_floor` (a row `ts`;
+`dashboard/display_floor.py`) is served without the rows stamped at or before it:
+every route's composed page, the no-limit one included, is cut after its last such
+row (`clip_to_floor`), `next_before` moves to the first row kept and `has_more`
+turns false once a page meets the floor, while `total` keeps counting the whole
+corpus. The rows stay on disk, so the save model, a cold-start replay and the
+agent's own session reads are unchanged. Only a cron job's `on_tab_close="fresh"`
+reopen writes one ([learn-cron-dashboard](learn-cron-dashboard.md), *Fresh Tab
+After a Close*).
 
 ### Slot-detail rendered row memo
 

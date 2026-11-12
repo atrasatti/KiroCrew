@@ -22,6 +22,7 @@ from kiro_crew.dashboard.cron_inject import (
     hydrate_slot_from_history,
     inject_cron_result_to_dashboard,
     prefetch_cron_dismissed,
+    read_cron_tab_rows,
     restore_cron_turn_timeout,
 )
 from kiro_crew.dashboard.cron_note_ack import (
@@ -138,7 +139,7 @@ async def api_cron_to_chat(request: web.Request) -> web.Response:
     job = next((j for j in jobs if j.id == job_id), None)
     if job:
         history = (
-            await asyncio.to_thread(state.conversation_log.read_messages, f"cron:{job.id}")
+            await asyncio.to_thread(read_cron_tab_rows, state.conversation_log, f"cron:{job.id}")
             if state.conversation_log
             else []
         )
@@ -158,7 +159,7 @@ async def api_cron_to_chat(request: web.Request) -> web.Response:
         # Job deleted (one-shot with delete_after_run). Create slot from history or notification.
         session_key = f"cron:{job_id}"
         history = (
-            await asyncio.to_thread(state.conversation_log.read_messages, session_key)
+            await asyncio.to_thread(read_cron_tab_rows, state.conversation_log, session_key)
             if state.conversation_log
             else []
         )
