@@ -16,6 +16,18 @@ triggers: write a test, add a test, fix a flaky test, test is flaky, test side e
 > the decision order — what to check first, and what the failure looks like when you
 > get it wrong.
 
+## Own the codebase
+
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.
+
+Treat every change as something you'll own and maintain long-term. Don't just add code around existing problems. Fix the underlying causes, consolidate duplicated logic, and improve the architecture when it makes the implementation simpler and more reliable.
+
+You have the authority to make related improvements without asking for permission, as long as you preserve intended behavior, compatibility, and user expectations.
+
+Don't stop at reporting problems. Fix them, test your changes, and drive the implementation to green.
+
+This never overrides the security invariants or another rule in the root `AGENTS.md`, the skill or agent charter you follow, or an explicit stop from the user.
+
 ## Where this skill stops, and which sibling takes over
 
 This skill owns **authoring** a test: isolation, determinism, cross-platform
